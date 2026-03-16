@@ -1,6 +1,7 @@
 #pragma once
 
 #ifdef _WIN32
+#include <winsock2.h>
 #include <windows.h>
 #endif
 
@@ -9,19 +10,23 @@
 
 namespace webify {
 
-// Injects mouse and keyboard input into a specific desktop.
+// Sends mouse and keyboard input to a specific window via PostMessage.
+// Does not require SetThreadDesktop or SetForegroundWindow.
 class InputHandler {
 public:
     InputHandler();
     ~InputHandler();
 
-    // Attach to a desktop by name — input will be sent there.
+    // Attach to a desktop by name (legacy, kept for API compat)
     bool attach(const std::string& desktop_name);
     void detach();
 
-    // Mouse events
+    // Set target window — all input goes here via PostMessage
+    void set_target(HWND hwnd) { target_hwnd_ = hwnd; }
+
+    // Mouse events (x, y in client coordinates of the target window)
     void mouse_move(int x, int y);
-    void mouse_button(int button, bool down);  // button: 0=left, 1=right, 2=middle
+    void mouse_button(int button, bool down);
     void mouse_scroll(int delta);
 
     // Keyboard events
@@ -29,9 +34,11 @@ public:
 
 private:
 #ifdef _WIN32
-    HDESK desktop_ = nullptr;
+    HWND target_hwnd_ = nullptr;
 #endif
     bool attached_ = false;
+    int last_mouse_x_ = 0;
+    int last_mouse_y_ = 0;
 };
 
 } // namespace webify

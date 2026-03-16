@@ -52,14 +52,24 @@ std::string DesktopManager::create_session(const std::string& app_path,
 
     // CreateDesktopA creates a new desktop within the current window station.
     // The desktop is initially empty — no explorer shell, no taskbar.
-    // This is exactly what we want: a clean canvas for the app.
+    // Use a NULL DACL so other threads/components in the same process
+    // can open the desktop by name for capture and input.
+    SECURITY_DESCRIPTOR sd;
+    InitializeSecurityDescriptor(&sd, SECURITY_DESCRIPTOR_REVISION);
+    SetSecurityDescriptorDacl(&sd, TRUE, nullptr, FALSE);  // NULL DACL = allow all
+
+    SECURITY_ATTRIBUTES sa = {};
+    sa.nLength = sizeof(sa);
+    sa.lpSecurityDescriptor = &sd;
+    sa.bInheritHandle = FALSE;
+
     HDESK hDesktop = CreateDesktopA(
         session->desktop_name.c_str(),
         nullptr,                        // reserved
         nullptr,                        // reserved
         0,                              // flags
         GENERIC_ALL,                    // access
-        nullptr                         // security attributes
+        &sa                             // security attributes
     );
 
     if (!hDesktop) {

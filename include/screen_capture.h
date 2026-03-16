@@ -1,12 +1,12 @@
 #pragma once
 
 #ifdef _WIN32
+#include <winsock2.h>
 #include <windows.h>
 #endif
 
 #include <cstdint>
 #include <vector>
-#include <functional>
 #include <string>
 
 namespace webify {
@@ -18,34 +18,34 @@ struct FrameData {
     int stride = 0;
 };
 
-// Captures screen contents from a specific desktop using GDI.
-// GDI capture is simpler than Desktop Duplication API and works
-// on non-active desktops — perfect for the PoC.
+// Captures window contents by process ID using PrintWindow.
+// Stays on the interactive desktop so GDI has a real display surface.
 class ScreenCapture {
 public:
     ScreenCapture();
     ~ScreenCapture();
 
-    // Start capturing a desktop by name. Captures at the given FPS.
-    bool start(const std::string& desktop_name, int width, int height, int fps = 15);
+    // Start capturing. process_id is the target app's PID.
+    bool start(uint32_t process_id, int width, int height, int fps = 15);
     void stop();
 
-    // Grab a single frame (synchronous). Returns false if capture failed.
+    // Grab a single frame (synchronous).
     bool capture_frame(FrameData& frame);
 
     bool is_running() const { return running_; }
 
 private:
-#ifdef _WIN32
-    HDESK desktop_ = nullptr;
-    HDC desktop_dc_ = nullptr;
-    HDC mem_dc_ = nullptr;
-    HBITMAP bitmap_ = nullptr;
-    HBITMAP old_bitmap_ = nullptr;
-#endif
     int width_ = 0;
     int height_ = 0;
     bool running_ = false;
+    uint32_t target_pid_ = 0;
+
+#ifdef _WIN32
+    HDC mem_dc_ = nullptr;
+    HBITMAP bitmap_ = nullptr;
+    HBITMAP old_bitmap_ = nullptr;
+    void* dib_pixels_ = nullptr;
+#endif
 };
 
 } // namespace webify
