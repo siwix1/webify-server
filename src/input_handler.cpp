@@ -27,7 +27,7 @@ void InputHandler::mouse_move(int x, int y) {
     last_mouse_x_ = x;
     last_mouse_y_ = y;
     LPARAM lParam = MAKELPARAM(x, y);
-    SendMessage(target_hwnd_, WM_MOUSEMOVE, 0, lParam);
+    PostMessage(target_hwnd_, WM_MOUSEMOVE, 0, lParam);
 #endif
 }
 
@@ -52,12 +52,7 @@ void InputHandler::mouse_button(int button, bool down) {
             return;
     }
 
-    // Set focus on click so keyboard input works
-    if (down && button == 0) {
-        SetFocus(target_hwnd_);
-    }
-
-    SendMessage(target_hwnd_, msg, wParam, lParam);
+    PostMessage(target_hwnd_, msg, wParam, lParam);
 #endif
 }
 
@@ -66,7 +61,7 @@ void InputHandler::mouse_scroll(int delta) {
     if (!target_hwnd_) return;
     WPARAM wParam = MAKEWPARAM(0, (SHORT)delta);
     LPARAM lParam = MAKELPARAM(last_mouse_x_, last_mouse_y_);
-    SendMessage(target_hwnd_, WM_MOUSEWHEEL, wParam, lParam);
+    PostMessage(target_hwnd_, WM_MOUSEWHEEL, wParam, lParam);
 #endif
 }
 
@@ -91,7 +86,7 @@ void InputHandler::key_event(uint16_t vk_code, bool down) {
         shift_held_ = down;
     }
 
-    SendMessage(target_hwnd_, down ? WM_KEYDOWN : WM_KEYUP, vk_code, lParam);
+    PostMessage(target_hwnd_, down ? WM_KEYDOWN : WM_KEYUP, vk_code, lParam);
 
     // Send WM_CHAR for printable characters on keydown
     if (down && vk_code >= 0x20 && vk_code <= 0x7E) {
@@ -100,7 +95,7 @@ void InputHandler::key_event(uint16_t vk_code, bool down) {
         if (!shift_held_ && ch >= 'A' && ch <= 'Z') {
             ch = ch - 'A' + 'a'; // lowercase
         }
-        SendMessage(target_hwnd_, WM_CHAR, ch, lParam);
+        PostMessage(target_hwnd_, WM_CHAR, ch, lParam);
     }
 #endif
 }
