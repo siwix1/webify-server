@@ -37,6 +37,7 @@ private:
     HWND target_hwnd_ = nullptr;
 #endif
     bool attached_ = false;
+    bool shift_held_ = false;
     int last_mouse_x_ = 0;
     int last_mouse_y_ = 0;
 };
