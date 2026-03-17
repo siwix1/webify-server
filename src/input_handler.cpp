@@ -85,9 +85,22 @@ void InputHandler::mouse_button(int button, bool down) {
     HWND target = child_at(last_mouse_x_, last_mouse_y_, pt);
     if (!target) return;
 
+    // Debug: log what we're clicking
+    char cls[64] = {};
+    GetClassNameA(target, cls, sizeof(cls));
+    fprintf(stderr, "INPUT: %s btn=%d at (%d,%d) -> HWND=%p class='%s' child_pt=(%ld,%ld)\n",
+            down ? "DOWN" : "UP", button, last_mouse_x_, last_mouse_y_,
+            (void*)target, cls, pt.x, pt.y);
+
     // Track which child was last clicked for keyboard targeting
     if (down && button == 0) {
         focused_child_ = target;
+
+        // For button controls, also send BM_CLICK which is more reliable
+        if (_stricmp(cls, "Button") == 0) {
+            PostMessage(target, BM_CLICK, 0, 0);
+            return;
+        }
     }
 
     PostMessage(target, msg, wParam, MAKELPARAM(pt.x, pt.y));
