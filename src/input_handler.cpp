@@ -52,6 +52,19 @@ void InputHandler::mouse_button(int button, bool down) {
             return;
     }
 
+    // On left click, attach to target thread and set focus for keyboard input
+    if (down && button == 0) {
+        DWORD target_tid = GetWindowThreadProcessId(target_hwnd_, nullptr);
+        DWORD our_tid = GetCurrentThreadId();
+        if (target_tid != our_tid) {
+            AttachThreadInput(our_tid, target_tid, TRUE);
+            SetFocus(target_hwnd_);
+            AttachThreadInput(our_tid, target_tid, FALSE);
+        } else {
+            SetFocus(target_hwnd_);
+        }
+    }
+
     PostMessage(target_hwnd_, msg, wParam, lParam);
 #endif
 }
