@@ -282,8 +282,8 @@ int main(int argc, char* argv[]) {
         }
         session->monitor_index = assigned_monitor;
 
-        // Launch a new app instance for this client, starting off-screen
-        static int spawn_x = -4000;
+        // Launch a new app instance for this client
+        static int spawn_x = 0;
         STARTUPINFOA si = {};
         si.cb = sizeof(si);
         si.dwFlags = STARTF_USEPOSITION | STARTF_USESIZE;
@@ -291,7 +291,7 @@ int main(int argc, char* argv[]) {
         si.dwY = 0;
         si.dwXSize = width;
         si.dwYSize = height;
-        spawn_x -= (width + 100);
+        spawn_x += 50;  // Stagger windows slightly
         PROCESS_INFORMATION pi = {};
 
         // Make a mutable copy of app_path for CreateProcessA
