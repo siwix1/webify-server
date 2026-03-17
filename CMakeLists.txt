@@ -32,6 +32,7 @@ add_library(webify-core STATIC
     src/signaling_server.cpp
     src/ws_server.cpp
     src/jpeg_encoder.cpp
+    src/vdd_capture.cpp
 )
 
 target_include_directories(webify-core PUBLIC include src)

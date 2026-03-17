@@ -1,4 +1,5 @@
 #include "screen_capture.h"
+#include "vdd_capture.h"
 #include "input_handler.h"
 #include "ws_server.h"
 #include "jpeg_encoder.h"
@@ -187,10 +188,12 @@ static HWND find_edit_child(HWND parent) {
 // Per-client session: owns an app process, capture, and input handler
 struct ClientSession {
     int client_id = 0;
+    int monitor_index = -1;  // virtual monitor index when using VDD
     DWORD app_pid = 0;
     HANDLE app_process = nullptr;
     HWND app_hwnd = nullptr;
-    webify::ScreenCapture capture;
+    webify::ScreenCapture capture;      // PrintWindow mode
+    webify::VddCapture vdd_capture;     // VDD shared memory mode
     webify::InputHandler input;
     std::thread capture_thread;
     std::mutex frame_mutex;
@@ -213,6 +216,8 @@ int main(int argc, char* argv[]) {
     int fps = 10;
     uint16_t port = 8080;
     int jpeg_quality = 50;
+    bool use_vdd = false;
+    int max_monitors = 4;
 
     for (int i = 1; i < argc; i++) {
         std::string arg = argv[i];
@@ -222,6 +227,8 @@ int main(int argc, char* argv[]) {
         else if (arg == "--fps" && i + 1 < argc) fps = std::stoi(argv[++i]);
         else if (arg == "--port" && i + 1 < argc) port = (uint16_t)std::stoi(argv[++i]);
         else if (arg == "--quality" && i + 1 < argc) jpeg_quality = std::stoi(argv[++i]);
+        else if (arg == "--vdd") use_vdd = true;
+        else if (arg == "--monitors" && i + 1 < argc) max_monitors = std::stoi(argv[++i]);
         else if (arg == "--help") {
             fprintf(stdout, "Usage: webify-server [options]\n");
             fprintf(stdout, "  --app <path>       Application to launch per client (default: notepad.exe)\n");
@@ -230,6 +237,8 @@ int main(int argc, char* argv[]) {
             fprintf(stdout, "  --fps <n>          Capture framerate (default: 10)\n");
             fprintf(stdout, "  --port <n>         HTTP/WebSocket port (default: 8080)\n");
             fprintf(stdout, "  --quality <1-100>  JPEG quality (default: 50)\n");
+            fprintf(stdout, "  --vdd              Use virtual display driver for capture\n");
+            fprintf(stdout, "  --monitors <n>     Max virtual monitors (default: 4)\n");
             return 0;
         }
     }
@@ -239,6 +248,13 @@ int main(int argc, char* argv[]) {
     std::mutex sessions_mutex;
     std::unordered_map<int, std::unique_ptr<ClientSession>> sessions;
 
+    // Track which virtual monitors are in use (for VDD mode)
+    std::vector<bool> monitor_in_use(max_monitors, false);
+
+    if (use_vdd) {
+        fprintf(stdout, "VDD mode: using virtual display driver with %d monitors\n", max_monitors);
+    }
+
     webify::WsServer ws;
     ws.set_html(CLIENT_HTML);
 
@@ -247,6 +263,24 @@ int main(int argc, char* argv[]) {
 
         auto session = std::make_unique<ClientSession>();
         session->client_id = client_id;
+
+        // In VDD mode, assign a virtual monitor
+        int assigned_monitor = -1;
+        if (use_vdd) {
+            std::lock_guard<std::mutex> lock(sessions_mutex);
+            for (int i = 0; i < max_monitors; i++) {
+                if (!monitor_in_use[i]) {
+                    monitor_in_use[i] = true;
+                    assigned_monitor = i;
+                    break;
+                }
+            }
+            if (assigned_monitor < 0) {
+                fprintf(stderr, "Client %d: no virtual monitors available\n", client_id);
+                return;
+            }
+        }
+        session->monitor_index = assigned_monitor;
 
         // Launch a new app instance for this client, starting off-screen
         static int spawn_x = -4000;
@@ -265,13 +299,18 @@ int main(int argc, char* argv[]) {
         if (!CreateProcessA(nullptr, const_cast<char*>(cmd.c_str()),
                             nullptr, nullptr, FALSE, 0, nullptr, nullptr, &si, &pi)) {
             fprintf(stderr, "Client %d: CreateProcess failed: %lu\n", client_id, GetLastError());
+            if (assigned_monitor >= 0) {
+                std::lock_guard<std::mutex> lock(sessions_mutex);
+                monitor_in_use[assigned_monitor] = false;
+            }
             return;
         }
 
         session->app_process = pi.hProcess;
         session->app_pid = pi.dwProcessId;
         CloseHandle(pi.hThread);
-        fprintf(stdout, "Client %d: app PID %lu\n", client_id, (unsigned long)session->app_pid);
+        fprintf(stdout, "Client %d: app PID %lu (monitor %d)\n",
+                client_id, (unsigned long)session->app_pid, assigned_monitor);
 
         // Wait for window to appear
         Sleep(2000);
@@ -295,14 +334,29 @@ int main(int argc, char* argv[]) {
         fprintf(stdout, "Client %d: HWND %p, edit child %p\n",
                 client_id, (void*)session->app_hwnd, (void*)edit_hwnd);
 
-        // Window should already be off-screen from STARTUPINFO position
-
-        // Start capture for this client's app
-        if (!session->capture.start(session->app_pid, width, height, fps)) {
-            fprintf(stderr, "Client %d: capture start failed\n", client_id);
-            TerminateProcess(session->app_process, 0);
-            CloseHandle(session->app_process);
-            return;
+        // Start capture
+        if (use_vdd && assigned_monitor >= 0) {
+            // VDD mode: read frames from shared memory
+            if (!session->vdd_capture.start(assigned_monitor, width, height)) {
+                fprintf(stderr, "Client %d: VDD capture start failed, falling back to PrintWindow\n", client_id);
+                // Fall back to PrintWindow
+                if (!session->capture.start(session->app_pid, width, height, fps)) {
+                    fprintf(stderr, "Client %d: capture start failed\n", client_id);
+                    TerminateProcess(session->app_process, 0);
+                    CloseHandle(session->app_process);
+                    std::lock_guard<std::mutex> lock(sessions_mutex);
+                    monitor_in_use[assigned_monitor] = false;
+                    return;
+                }
+            }
+        } else {
+            // PrintWindow mode
+            if (!session->capture.start(session->app_pid, width, height, fps)) {
+                fprintf(stderr, "Client %d: capture start failed\n", client_id);
+                TerminateProcess(session->app_process, 0);
+                CloseHandle(session->app_process);
+                return;
+            }
         }
 
         // Input handler — target the edit child if found, otherwise main window
@@ -311,13 +365,17 @@ int main(int argc, char* argv[]) {
         session->running = true;
 
         // Capture thread — captures frames and encodes JPEG
+        bool session_uses_vdd = use_vdd && session->vdd_capture.is_running();
         auto* raw_session = session.get();
-        session->capture_thread = std::thread([raw_session, fps, jpeg_quality]() {
+        session->capture_thread = std::thread([raw_session, fps, jpeg_quality, session_uses_vdd]() {
             auto frame_interval = std::chrono::milliseconds(1000 / fps);
             while (raw_session->running && g_running) {
                 auto t0 = std::chrono::steady_clock::now();
                 webify::FrameData frame;
-                if (raw_session->capture.capture_frame(frame)) {
+                bool got_frame = session_uses_vdd
+                    ? raw_session->vdd_capture.capture_frame(frame)
+                    : raw_session->capture.capture_frame(frame);
+                if (got_frame) {
                     auto encoded = webify::encode_jpeg(frame.pixels.data(),
                                                         frame.width, frame.height,
                                                         jpeg_quality);
@@ -332,6 +390,7 @@ int main(int argc, char* argv[]) {
                     std::this_thread::sleep_for(sleep_time);
             }
             raw_session->capture.stop();
+            raw_session->vdd_capture.stop();
         });
 
         {
@@ -361,7 +420,14 @@ int main(int argc, char* argv[]) {
                 TerminateProcess(session->app_process, 0);
                 CloseHandle(session->app_process);
             }
-            fprintf(stdout, "Client %d: session destroyed\n", client_id);
+            // Release the virtual monitor
+            if (session->monitor_index >= 0) {
+                std::lock_guard<std::mutex> lock(sessions_mutex);
+                if (session->monitor_index < (int)monitor_in_use.size())
+                    monitor_in_use[session->monitor_index] = false;
+            }
+            fprintf(stdout, "Client %d: session destroyed (monitor %d released)\n",
+                    client_id, session->monitor_index);
         }
     });
 
