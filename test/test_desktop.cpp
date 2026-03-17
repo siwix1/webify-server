@@ -34,7 +34,7 @@ int main() {
     std::this_thread::sleep_for(std::chrono::seconds(2));
 
     webify::ScreenCapture capture;
-    if (!capture.start(session->desktop_name, session->width, session->height)) {
+    if (!capture.start(0, session->width, session->height)) {
         fprintf(stderr, "FAIL: Could not start screen capture\n");
         mgr.destroy_session(session_id);
         return 1;
