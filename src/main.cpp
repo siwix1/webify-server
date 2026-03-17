@@ -153,7 +153,7 @@ static HWND find_main_window(DWORD pid) {
         auto* data = (Data*)param;
         DWORD wnd_pid = 0;
         GetWindowThreadProcessId(hwnd, &wnd_pid);
-        if (wnd_pid == data->pid && IsWindowVisible(hwnd)) {
+        if (wnd_pid == data->pid) {
             RECT r;
             GetWindowRect(hwnd, &r);
             if ((r.right - r.left) > 0 && (r.bottom - r.top) > 0) {
