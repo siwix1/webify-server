@@ -359,8 +359,8 @@ int main(int argc, char* argv[]) {
             }
         }
 
-        // Input handler — target the edit child if found, otherwise main window
-        session->input.set_target(edit_hwnd ? edit_hwnd : session->app_hwnd);
+        // Input handler — target the main window so clicks reach all child controls
+        session->input.set_target(session->app_hwnd);
 
         session->running = true;
 
