@@ -1,0 +1,72 @@
+;
+; WebifyVDD.inf - Webify Virtual Display Driver
+;
+
+[Version]
+PnpLockDown=1
+Signature="$Windows NT$"
+ClassGUID = {4D36E968-E325-11CE-BFC1-08002BE10318}
+Class = Display
+ClassVer = 2.0
+Provider=%ManufacturerName%
+CatalogFile=WebifyVDD.cat
+DriverVer=
+
+[Manufacturer]
+%ManufacturerName%=Standard,NT$ARCH$.10.0...22000
+
+[Standard.NT$ARCH$.10.0...22000]
+%DeviceName%=MyDevice_Install, Root\WebifyVDD
+%DeviceName%=MyDevice_Install, WebifyVDD
+
+[SourceDisksFiles]
+WebifyVDD.dll=1
+
+[SourceDisksNames]
+1 = %DiskName%
+
+; =================== UMDF Device ==================================
+
+[MyDevice_Install.NT]
+Include=WUDFRD.inf
+Needs=WUDFRD.NT
+CopyFiles=UMDriverCopy
+
+[MyDevice_Install.NT.hw]
+Include=WUDFRD.inf
+Needs=WUDFRD.NT.HW
+AddReg = MyDevice_HardwareDeviceSettings
+
+[MyDevice_HardwareDeviceSettings]
+HKR,, "UpperFilters",  %REG_MULTI_SZ%, "IndirectKmd"
+HKR, "WUDF", "DeviceGroupId", %REG_SZ%, "WebifyVDDGroup"
+
+[MyDevice_Install.NT.Services]
+Include=WUDFRD.inf
+Needs=WUDFRD.NT.Services
+
+[MyDevice_Install.NT.Wdf]
+UmdfService=WebifyVDD,WebifyVDD_Install
+UmdfServiceOrder=WebifyVDD
+UmdfKernelModeClientPolicy = AllowKernelModeClients
+
+[WebifyVDD_Install]
+UmdfLibraryVersion=$UMDFVERSION$
+ServiceBinary=%12%\UMDF\WebifyVDD.dll
+UmdfExtensions = IddCx0102
+
+[DestinationDirs]
+UMDriverCopy=12,UMDF
+
+[UMDriverCopy]
+WebifyVDD.dll
+
+; =================== Generic ==================================
+
+[Strings]
+ManufacturerName="Webify"
+DiskName = "Webify Virtual Display Driver"
+DeviceName="Webify Virtual Display"
+
+REG_MULTI_SZ  = 0x00010000
+REG_SZ        = 0x00000000
