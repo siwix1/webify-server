@@ -27,59 +27,57 @@ void InputHandler::mouse_move(int x, int y) {
     last_mouse_x_ = x;
     last_mouse_y_ = y;
 
-    // Find child window under cursor and send to it
+    // Convert client coords to screen coords, then use SendInput
     POINT pt = {x, y};
-    HWND child = ChildWindowFromPoint(target_hwnd_, pt);
-    HWND target = (child && child != target_hwnd_) ? child : target_hwnd_;
+    ClientToScreen(target_hwnd_, &pt);
 
-    // Convert to child's client coordinates if needed
-    if (target != target_hwnd_) {
-        MapWindowPoints(target_hwnd_, target, &pt, 1);
-    }
+    // SendInput expects normalized absolute coordinates (0-65535)
+    int screen_w = GetSystemMetrics(SM_CXSCREEN);
+    int screen_h = GetSystemMetrics(SM_CYSCREEN);
+    int abs_x = (int)((pt.x * 65535.0) / screen_w);
+    int abs_y = (int)((pt.y * 65535.0) / screen_h);
 
-    PostMessage(target, WM_MOUSEMOVE, 0, MAKELPARAM(pt.x, pt.y));
+    INPUT input = {};
+    input.type = INPUT_MOUSE;
+    input.mi.dx = abs_x;
+    input.mi.dy = abs_y;
+    input.mi.dwFlags = MOUSEEVENTF_MOVE | MOUSEEVENTF_ABSOLUTE;
+    SendInput(1, &input, sizeof(INPUT));
 #endif
 }
 
 void InputHandler::mouse_button(int button, bool down) {
 #ifdef _WIN32
     if (!target_hwnd_) return;
-    UINT msg = 0;
-    WPARAM wParam = 0;
+
+    INPUT input = {};
+    input.type = INPUT_MOUSE;
 
     switch (button) {
         case 0: // left
-            msg = down ? WM_LBUTTONDOWN : WM_LBUTTONUP;
-            wParam = down ? MK_LBUTTON : 0;
+            input.mi.dwFlags = down ? MOUSEEVENTF_LEFTDOWN : MOUSEEVENTF_LEFTUP;
             break;
-        case 1: // right  (browser button 2)
+        case 1: // right (browser button 2)
         case 2: // right
-            msg = down ? WM_RBUTTONDOWN : WM_RBUTTONUP;
-            wParam = down ? MK_RBUTTON : 0;
+            input.mi.dwFlags = down ? MOUSEEVENTF_RIGHTDOWN : MOUSEEVENTF_RIGHTUP;
             break;
         default:
             return;
     }
 
-    // Find child window under cursor
-    POINT pt = {last_mouse_x_, last_mouse_y_};
-    HWND child = ChildWindowFromPoint(target_hwnd_, pt);
-    HWND target = (child && child != target_hwnd_) ? child : target_hwnd_;
-
-    if (target != target_hwnd_) {
-        MapWindowPoints(target_hwnd_, target, &pt, 1);
-    }
-
-    PostMessage(target, msg, wParam, MAKELPARAM(pt.x, pt.y));
+    SendInput(1, &input, sizeof(INPUT));
 #endif
 }
 
 void InputHandler::mouse_scroll(int delta) {
 #ifdef _WIN32
     if (!target_hwnd_) return;
-    WPARAM wParam = MAKEWPARAM(0, (SHORT)delta);
-    LPARAM lParam = MAKELPARAM(last_mouse_x_, last_mouse_y_);
-    PostMessage(target_hwnd_, WM_MOUSEWHEEL, wParam, lParam);
+
+    INPUT input = {};
+    input.type = INPUT_MOUSE;
+    input.mi.dwFlags = MOUSEEVENTF_WHEEL;
+    input.mi.mouseData = delta;
+    SendInput(1, &input, sizeof(INPUT));
 #endif
 }
 
@@ -87,34 +85,25 @@ void InputHandler::key_event(uint16_t vk_code, bool down) {
 #ifdef _WIN32
     if (!target_hwnd_) return;
 
-    UINT scan = MapVirtualKey(vk_code, MAPVK_VK_TO_VSC);
-    LPARAM lParam = 1 | (scan << 16);
-
-    // Extended key flag
-    if (vk_code >= VK_PRIOR && vk_code <= VK_DELETE) {
-        lParam |= (1 << 24);
-    }
-
-    if (!down) {
-        lParam |= (1 << 30) | (1 << 31); // previous state + transition
-    }
-
     // Track shift state locally
     if (vk_code == VK_SHIFT || vk_code == VK_LSHIFT || vk_code == VK_RSHIFT) {
         shift_held_ = down;
     }
 
-    PostMessage(target_hwnd_, down ? WM_KEYDOWN : WM_KEYUP, vk_code, lParam);
+    UINT scan = MapVirtualKey(vk_code, MAPVK_VK_TO_VSC);
 
-    // Send WM_CHAR for printable characters on keydown
-    if (down && vk_code >= 0x20 && vk_code <= 0x7E) {
-        // Track shift state ourselves since GetAsyncKeyState won't work cross-session
-        char ch = (char)vk_code;
-        if (!shift_held_ && ch >= 'A' && ch <= 'Z') {
-            ch = ch - 'A' + 'a'; // lowercase
-        }
-        PostMessage(target_hwnd_, WM_CHAR, ch, lParam);
+    INPUT input = {};
+    input.type = INPUT_KEYBOARD;
+    input.ki.wVk = vk_code;
+    input.ki.wScan = (WORD)scan;
+    input.ki.dwFlags = down ? 0 : KEYEVENTF_KEYUP;
+
+    // Extended key flag for navigation keys
+    if (vk_code >= VK_PRIOR && vk_code <= VK_DELETE) {
+        input.ki.dwFlags |= KEYEVENTF_EXTENDEDKEY;
     }
+
+    SendInput(1, &input, sizeof(INPUT));
 #endif
 }
 

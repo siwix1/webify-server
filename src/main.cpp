@@ -296,6 +296,7 @@ int main(int argc, char* argv[]) {
 
         // Make a mutable copy of app_path for CreateProcessA
         std::string cmd = app_path;
+        fprintf(stdout, "Client %d: launching '%s'...\n", client_id, cmd.c_str());
         if (!CreateProcessA(nullptr, const_cast<char*>(cmd.c_str()),
                             nullptr, nullptr, FALSE, 0, nullptr, nullptr, &si, &pi)) {
             fprintf(stderr, "Client %d: CreateProcess failed: %lu\n", client_id, GetLastError());
