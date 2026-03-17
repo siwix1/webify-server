@@ -134,19 +134,48 @@ bool ScreenCapture::capture_frame(FrameData& frame) {
         int h = wr.bottom - wr.top;
         if (w <= 0 || h <= 0) return TRUE;
 
-        // Capture the window's screen region using BitBlt from screen DC
-        // This works even when PrintWindow returns black (no full DWM)
-        HDC screen_dc = GetDC(nullptr);
-        int dx = 0, dy = 0;
-        int cw = (w < d->width) ? w : d->width;
-        int ch = (h < d->height) ? h : d->height;
-        BitBlt(d->dc, dx, dy, cw, ch, screen_dc, wr.left, wr.top, SRCCOPY);
-        ReleaseDC(nullptr, screen_dc);
-        d->count++;
+        // Use GetDC on the window itself and BitBlt from it
+        // This captures the window's own DC which includes painted content
+        HDC win_src_dc = GetDC(hwnd);
+        if (win_src_dc) {
+            int dx = 0, dy = 0;
+            int cw = (w < d->width) ? w : d->width;
+            int ch = (h < d->height) ? h : d->height;
+            // Get client area offset
+            POINT pt = {0, 0};
+            ClientToScreen(hwnd, &pt);
+            int frame_x = pt.x - wr.left;
+            int frame_y = pt.y - wr.top;
+            BitBlt(d->dc, dx, dy, cw, ch, win_src_dc, 0, 0, SRCCOPY);
+            ReleaseDC(hwnd, win_src_dc);
+            d->count++;
 
-        if (d->log) {
-            fprintf(stderr, "DEBUG: BitBlt captured HWND=%p at (%ld,%ld) %dx%d\n",
-                    (void*)hwnd, wr.left, wr.top, w, h);
+            if (d->log) {
+                fprintf(stderr, "DEBUG: GetDC+BitBlt captured HWND=%p %dx%d\n",
+                        (void*)hwnd, w, h);
+            }
+        } else {
+            // Fallback to PrintWindow
+            HDC win_dc = CreateCompatibleDC(d->dc);
+            HBITMAP win_bmp = CreateCompatibleBitmap(d->dc, w, h);
+            HBITMAP old = (HBITMAP)SelectObject(win_dc, win_bmp);
+
+            if (PrintWindow(hwnd, win_dc, 0)) {
+                int dx = 0, dy = 0;
+                int cw = (w < d->width) ? w : d->width;
+                int ch = (h < d->height) ? h : d->height;
+                BitBlt(d->dc, dx, dy, cw, ch, win_dc, 0, 0, SRCCOPY);
+                d->count++;
+            }
+
+            SelectObject(win_dc, old);
+            DeleteObject(win_bmp);
+            DeleteDC(win_dc);
+
+            if (d->log) {
+                fprintf(stderr, "DEBUG: PrintWindow fallback HWND=%p %dx%d\n",
+                        (void*)hwnd, w, h);
+            }
         }
 
         return TRUE;
