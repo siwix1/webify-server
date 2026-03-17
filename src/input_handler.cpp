@@ -26,15 +26,24 @@ void InputHandler::mouse_move(int x, int y) {
     if (!target_hwnd_) return;
     last_mouse_x_ = x;
     last_mouse_y_ = y;
-    LPARAM lParam = MAKELPARAM(x, y);
-    PostMessage(target_hwnd_, WM_MOUSEMOVE, 0, lParam);
+
+    // Find child window under cursor and send to it
+    POINT pt = {x, y};
+    HWND child = ChildWindowFromPoint(target_hwnd_, pt);
+    HWND target = (child && child != target_hwnd_) ? child : target_hwnd_;
+
+    // Convert to child's client coordinates if needed
+    if (target != target_hwnd_) {
+        MapWindowPoints(target_hwnd_, target, &pt, 1);
+    }
+
+    PostMessage(target, WM_MOUSEMOVE, 0, MAKELPARAM(pt.x, pt.y));
 #endif
 }
 
 void InputHandler::mouse_button(int button, bool down) {
 #ifdef _WIN32
     if (!target_hwnd_) return;
-    LPARAM lParam = MAKELPARAM(last_mouse_x_, last_mouse_y_);
     UINT msg = 0;
     WPARAM wParam = 0;
 
@@ -52,20 +61,16 @@ void InputHandler::mouse_button(int button, bool down) {
             return;
     }
 
-    // On left click, attach to target thread and set focus for keyboard input
-    if (down && button == 0) {
-        DWORD target_tid = GetWindowThreadProcessId(target_hwnd_, nullptr);
-        DWORD our_tid = GetCurrentThreadId();
-        if (target_tid != our_tid) {
-            AttachThreadInput(our_tid, target_tid, TRUE);
-            SetFocus(target_hwnd_);
-            AttachThreadInput(our_tid, target_tid, FALSE);
-        } else {
-            SetFocus(target_hwnd_);
-        }
+    // Find child window under cursor
+    POINT pt = {last_mouse_x_, last_mouse_y_};
+    HWND child = ChildWindowFromPoint(target_hwnd_, pt);
+    HWND target = (child && child != target_hwnd_) ? child : target_hwnd_;
+
+    if (target != target_hwnd_) {
+        MapWindowPoints(target_hwnd_, target, &pt, 1);
     }
 
-    PostMessage(target_hwnd_, msg, wParam, lParam);
+    PostMessage(target, msg, wParam, MAKELPARAM(pt.x, pt.y));
 #endif
 }
 

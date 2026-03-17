@@ -312,9 +312,6 @@ int main(int argc, char* argv[]) {
         fprintf(stdout, "Client %d: app PID %lu (monitor %d)\n",
                 client_id, (unsigned long)session->app_pid, assigned_monitor);
 
-        // Wait for window to appear
-        Sleep(2000);
-
         // Build set of PIDs already used by other sessions
         std::set<DWORD> claimed_pids;
         {
@@ -328,11 +325,16 @@ int main(int argc, char* argv[]) {
         session->app_pid = find_real_pid(session->app_pid, app_path, claimed_pids);
         fprintf(stdout, "Client %d: resolved PID %lu\n", client_id, (unsigned long)session->app_pid);
 
-        // Find main window and edit child for input targeting
-        session->app_hwnd = find_main_window(session->app_pid);
-        HWND edit_hwnd = find_edit_child(session->app_hwnd);
-        fprintf(stdout, "Client %d: HWND %p, edit child %p\n",
-                client_id, (void*)session->app_hwnd, (void*)edit_hwnd);
+        // Wait for window to appear (retry up to 5 seconds)
+        session->app_hwnd = nullptr;
+        for (int attempt = 0; attempt < 10; attempt++) {
+            Sleep(500);
+            session->app_hwnd = find_main_window(session->app_pid);
+            if (session->app_hwnd) break;
+            fprintf(stdout, "Client %d: waiting for window (attempt %d)...\n", client_id, attempt + 1);
+        }
+        fprintf(stdout, "Client %d: HWND %p\n",
+                client_id, (void*)session->app_hwnd);
 
         // Start capture
         if (use_vdd && assigned_monitor >= 0) {
