@@ -139,7 +139,11 @@ bool ScreenCapture::capture_frame(FrameData& frame) {
         HBITMAP win_bmp = CreateCompatibleBitmap(d->dc, w, h);
         HBITMAP old = (HBITMAP)SelectObject(win_dc, win_bmp);
 
-        if (PrintWindow(hwnd, win_dc, PW_RENDERFULLCONTENT)) {
+        // Try PW_RENDERFULLCONTENT first, fall back to basic PrintWindow
+        // PW_RENDERFULLCONTENT can return black on servers without full DWM
+        BOOL pw_ok = PrintWindow(hwnd, win_dc, 0);
+        if (!pw_ok) pw_ok = PrintWindow(hwnd, win_dc, PW_RENDERFULLCONTENT);
+        if (pw_ok) {
             // Position the window in our virtual desktop at (0,0) for now
             // (since the app may be positioned anywhere on the real desktop)
             int dx = 0, dy = 0;
