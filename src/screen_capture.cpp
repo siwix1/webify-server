@@ -3,6 +3,13 @@
 #include <cstdio>
 #include <cstring>
 
+#ifdef _WIN32
+#include <d3d11.h>
+#include <dxgi1_2.h>
+#pragma comment(lib, "d3d11.lib")
+#pragma comment(lib, "dxgi.lib")
+#endif
+
 namespace webify {
 
 ScreenCapture::ScreenCapture() = default;
@@ -134,19 +141,16 @@ bool ScreenCapture::capture_frame(FrameData& frame) {
         int h = wr.bottom - wr.top;
         if (w <= 0 || h <= 0) return TRUE;
 
-        // Use GetDC on the window itself and BitBlt from it
-        // This captures the window's own DC which includes painted content
+        // Use GetDC on the window itself — captures client area only
+        // This matches PostMessage coordinates (which are client-relative)
         HDC win_src_dc = GetDC(hwnd);
         if (win_src_dc) {
-            int dx = 0, dy = 0;
-            int cw = (w < d->width) ? w : d->width;
-            int ch = (h < d->height) ? h : d->height;
-            // Get client area offset
-            POINT pt = {0, 0};
-            ClientToScreen(hwnd, &pt);
-            int frame_x = pt.x - wr.left;
-            int frame_y = pt.y - wr.top;
-            BitBlt(d->dc, dx, dy, cw, ch, win_src_dc, 0, 0, SRCCOPY);
+            // Get client area dimensions (excludes title bar and frame)
+            RECT cr;
+            GetClientRect(hwnd, &cr);
+            int cw = (cr.right < d->width) ? cr.right : d->width;
+            int ch = (cr.bottom < d->height) ? cr.bottom : d->height;
+            BitBlt(d->dc, 0, 0, cw, ch, win_src_dc, 0, 0, SRCCOPY);
             ReleaseDC(hwnd, win_src_dc);
             d->count++;
 
