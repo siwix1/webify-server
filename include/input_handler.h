@@ -35,6 +35,7 @@ public:
 private:
 #ifdef _WIN32
     HWND target_hwnd_ = nullptr;
+    void ensure_foreground();
 #endif
     bool attached_ = false;
     bool shift_held_ = false;

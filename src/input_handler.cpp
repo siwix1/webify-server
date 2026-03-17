@@ -21,13 +21,30 @@ void InputHandler::detach() {
     target_hwnd_ = nullptr;
 }
 
+#ifdef _WIN32
+// Ensure our target window is in the foreground before sending input
+void InputHandler::ensure_foreground() {
+    if (!target_hwnd_) return;
+    HWND fg = GetForegroundWindow();
+    if (fg == target_hwnd_) return;
+
+    // AllowSetForegroundWindow + SetForegroundWindow
+    DWORD fg_tid = GetWindowThreadProcessId(fg, nullptr);
+    DWORD our_tid = GetCurrentThreadId();
+    AttachThreadInput(our_tid, fg_tid, TRUE);
+    SetForegroundWindow(target_hwnd_);
+    BringWindowToTop(target_hwnd_);
+    AttachThreadInput(our_tid, fg_tid, FALSE);
+}
+#endif
+
 void InputHandler::mouse_move(int x, int y) {
 #ifdef _WIN32
     if (!target_hwnd_) return;
     last_mouse_x_ = x;
     last_mouse_y_ = y;
 
-    // Convert client coords to screen coords, then use SendInput
+    // Convert client coords to screen coords
     POINT pt = {x, y};
     ClientToScreen(target_hwnd_, &pt);
 
@@ -49,6 +66,9 @@ void InputHandler::mouse_move(int x, int y) {
 void InputHandler::mouse_button(int button, bool down) {
 #ifdef _WIN32
     if (!target_hwnd_) return;
+
+    // Bring our window to front before clicking
+    if (down) ensure_foreground();
 
     INPUT input = {};
     input.type = INPUT_MOUSE;
