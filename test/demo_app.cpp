@@ -4,12 +4,22 @@
 #include <windows.h>
 
 static HWND g_edit = nullptr;
+static HWND g_label = nullptr;
+
+static void PaintWindow(HWND hwnd, HDC hdc) {
+    RECT rc;
+    GetClientRect(hwnd, &rc);
+    // Paint background
+    FillRect(hdc, &rc, (HBRUSH)(COLOR_WINDOW + 1));
+    // Paint child controls
+    SendMessage(hwnd, WM_PRINTCLIENT, (WPARAM)hdc, PRF_CHILDREN | PRF_CLIENT);
+}
 
 LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
     switch (msg) {
         case WM_CREATE: {
             // Title label
-            CreateWindowW(L"STATIC", L"Webify Demo App",
+            g_label = CreateWindowW(L"STATIC", L"Webify Demo App",
                 WS_CHILD | WS_VISIBLE | SS_CENTER,
                 20, 10, 360, 30, hwnd, nullptr,
                 ((LPCREATESTRUCT)lParam)->hInstance, nullptr);
@@ -33,13 +43,24 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             }
             return 0;
         }
+        case WM_PAINT: {
+            PAINTSTRUCT ps;
+            HDC hdc = BeginPaint(hwnd, &ps);
+            RECT rc;
+            GetClientRect(hwnd, &rc);
+            FillRect(hdc, &rc, (HBRUSH)(COLOR_WINDOW + 1));
+            EndPaint(hwnd, &ps);
+            return 0;
+        }
+        case WM_ERASEBKGND: {
+            HDC hdc = (HDC)wParam;
+            RECT rc;
+            GetClientRect(hwnd, &rc);
+            FillRect(hdc, &rc, (HBRUSH)(COLOR_WINDOW + 1));
+            return 1;
+        }
         case WM_SETFOCUS:
             if (g_edit) SetFocus(g_edit);
-            return 0;
-        case WM_PRINT:
-        case WM_PRINTCLIENT:
-            // Support PrintWindow capture
-            DefWindowProc(hwnd, WM_PAINT, wParam, lParam);
             return 0;
         case WM_DESTROY:
             PostQuitMessage(0);
