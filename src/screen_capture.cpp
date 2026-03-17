@@ -134,31 +134,20 @@ bool ScreenCapture::capture_frame(FrameData& frame) {
         int h = wr.bottom - wr.top;
         if (w <= 0 || h <= 0) return TRUE;
 
-        // Create a temp DC/bitmap for this window
-        HDC win_dc = CreateCompatibleDC(d->dc);
-        HBITMAP win_bmp = CreateCompatibleBitmap(d->dc, w, h);
-        HBITMAP old = (HBITMAP)SelectObject(win_dc, win_bmp);
+        // Capture the window's screen region using BitBlt from screen DC
+        // This works even when PrintWindow returns black (no full DWM)
+        HDC screen_dc = GetDC(nullptr);
+        int dx = 0, dy = 0;
+        int cw = (w < d->width) ? w : d->width;
+        int ch = (h < d->height) ? h : d->height;
+        BitBlt(d->dc, dx, dy, cw, ch, screen_dc, wr.left, wr.top, SRCCOPY);
+        ReleaseDC(nullptr, screen_dc);
+        d->count++;
 
-        // Try PW_RENDERFULLCONTENT first, fall back to basic PrintWindow
-        // PW_RENDERFULLCONTENT can return black on servers without full DWM
-        BOOL pw_ok = PrintWindow(hwnd, win_dc, 0);
-        if (!pw_ok) pw_ok = PrintWindow(hwnd, win_dc, PW_RENDERFULLCONTENT);
-        if (pw_ok) {
-            // Position the window in our virtual desktop at (0,0) for now
-            // (since the app may be positioned anywhere on the real desktop)
-            int dx = 0, dy = 0;
-            int cw = (w < d->width) ? w : d->width;
-            int ch = (h < d->height) ? h : d->height;
-            BitBlt(d->dc, dx, dy, cw, ch, win_dc, 0, 0, SRCCOPY);
-            d->count++;
-        } else if (d->log) {
-            fprintf(stderr, "DEBUG: PrintWindow failed for HWND=%p err=%lu\n",
-                    (void*)hwnd, GetLastError());
+        if (d->log) {
+            fprintf(stderr, "DEBUG: BitBlt captured HWND=%p at (%ld,%ld) %dx%d\n",
+                    (void*)hwnd, wr.left, wr.top, w, h);
         }
-
-        SelectObject(win_dc, old);
-        DeleteObject(win_bmp);
-        DeleteDC(win_dc);
 
         return TRUE;
     }, (LPARAM)&data);
