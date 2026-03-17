@@ -13,9 +13,9 @@ CatalogFile=WebifyVDD.cat
 DriverVer=
 
 [Manufacturer]
-%ManufacturerName%=Standard,NT$ARCH$.10.0...22000
+%ManufacturerName%=Standard,NT$ARCH$.10.0...20348
 
-[Standard.NT$ARCH$.10.0...22000]
+[Standard.NT$ARCH$.10.0...20348]
 %DeviceName%=MyDevice_Install, Root\WebifyVDD
 %DeviceName%=MyDevice_Install, WebifyVDD
 
